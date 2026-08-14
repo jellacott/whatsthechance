@@ -1,137 +1,159 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function Home() {
-  const [query, setQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [resultNumber, setResultNumber] = useState(null);
-  const [displayNumber, setDisplayNumber] = useState(0);
-  const [hasSearched, setHasSearched] = useState(false);
-  const inputRef = useRef(null);
+  const [prompt, setPrompt] = useState('');
+  const [denominator, setDenominator] = useState(null);
+  const [displayValue, setDisplayValue] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [showPercentage, setShowPercentage] = useState(false);
 
-  // Number count-up animation
+  // Animated counter effect when a new denominator arrives
   useEffect(() => {
-    if (resultNumber === null) return;
+    if (!denominator) return;
 
-    let start = 0;
-    const duration = 1200; // ms
-    const startTime = performance.now();
+    let start = 1;
+    const duration = 1200; // 1.2 seconds animation
+    const steps = 40;
+    const stepTime = duration / steps;
+    const increment = (denominator - start) / steps;
 
-    const animateNumber = (currentTime) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic function for smooth deceleration
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentVal = Math.floor(easeOut * resultNumber);
-
-      setDisplayNumber(currentVal);
-
-      if (progress < 1) {
-        requestAnimationFrame(animateNumber);
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= denominator) {
+        setDisplayValue(denominator);
+        clearInterval(timer);
       } else {
-        setDisplayNumber(resultNumber);
+        setDisplayValue(Math.floor(start));
       }
-    };
+    }, stepTime);
 
-    requestAnimationFrame(animateNumber);
-  }, [resultNumber]);
+    return () => clearInterval(timer);
+  }, [denominator]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!query.trim() || isLoading) return;
+    if (!prompt.trim() || loading) return;
 
-    setIsLoading(true);
-    setHasSearched(true);
-    setResultNumber(null);
+    setLoading(true);
+    setDenominator(null);
 
     try {
       const res = await fetch('/api/chance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: query }),
+        body: JSON.stringify({ prompt }),
       });
 
       const data = await res.json();
-      if (res.ok && data.denominator) {
-        setResultNumber(data.denominator);
+      if (data.denominator) {
+        setDenominator(data.denominator);
       } else {
-        setResultNumber(1000000); // Fallback
+        setDenominator(1000000);
       }
     } catch (err) {
       console.error(err);
-      setResultNumber(500000);
+      setDenominator(1000000);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  return (
-    <main className="min-h-screen bg-[#EBECEE] text-[#111111] flex flex-col items-center justify-between px-6 py-12 font-sans selection:bg-black selection:text-white">
-      {/* Header */}
-      <header className="w-full text-center">
-        <h1 className="text-xl md:text-2xl font-medium tracking-tight opacity-90">
-          whatsthechance.com
-        </h1>
-      </header>
+  // Convert "1 in N" into exact percentage string
+  const getPercentageString = (val) => {
+    if (!val) return '0%';
+    const pct = (1 / val) * 100;
+    
+    if (pct < 0.0001) {
+      return `${pct.toExponential(4)}%`;
+    }
+    return `${pct.toFixed(6).replace(/\.?0+$/, '')}%`;
+  };
 
-      {/* Main Interaction Area */}
-      <div className="w-full max-w-xl flex flex-col items-center my-auto space-y-10">
-        
-        {/* Input Pill Form */}
-        <form 
-          onSubmit={handleSubmit}
-          className="w-full"
-        >
-          <div className="relative flex items-center w-full bg-white border-2 border-black rounded-full px-6 py-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all focus-within:shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
-            <span className="text-lg font-medium whitespace-nowrap text-black select-none pr-1.5">
-              What’s the chance
-            </span>
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="that the earth will explode..."
-              className="w-full bg-transparent text-lg text-black placeholder-neutral-400 focus:outline-none font-normal"
-              disabled={isLoading}
-            />
-            <button 
-              type="submit" 
-              disabled={isLoading || !query.trim()}
-              className="ml-2 text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-full bg-black text-white hover:bg-neutral-800 disabled:opacity-0 transition-opacity duration-200"
-            >
-              Calculate
-            </button>
+  return (
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 font-semibold">
+      {/* Animated glowing stroke effect styles */}
+      <style jsx global>{`
+        @keyframes border-glow {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .loading-border {
+          position: relative;
+          background: #111;
+          border-radius: 0.75rem;
+          padding: 2px;
+        }
+        .loading-border::before {
+          content: '';
+          position: absolute;
+          inset: -2px;
+          border-radius: 0.85rem;
+          background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+          background-size: 300% 300%;
+          animation: border-glow 2s linear infinite;
+          z-index: 0;
+        }
+        .loading-inner {
+          position: relative;
+          z-index: 1;
+          background: #000;
+          border-radius: 0.7rem;
+        }
+      `}</style>
+
+      <div className="w-full max-w-xl text-center space-y-8">
+        {/* Title */}
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
+          What's the chance...
+        </h1>
+
+        {/* Form with animated border loading state */}
+        <form onSubmit={handleSubmit} className="w-full">
+          <div className={loading ? 'loading-border' : ''}>
+            <div className={loading ? 'loading-inner p-1' : ''}>
+              <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden focus-within:border-zinc-500 transition">
+                <span className="pl-4 text-zinc-400 font-semibold select-none">
+                  What's the chance
+                </span>
+                <input
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="I get struck by lightning today?"
+                  className="w-full bg-transparent px-3 py-4 text-white focus:outline-none font-semibold placeholder-zinc-600"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mr-2 px-5 py-2.5 bg-white text-black font-bold rounded-lg hover:bg-zinc-200 transition disabled:opacity-50"
+                >
+                  {loading ? 'Thinking...' : 'Calculate'}
+                </button>
+              </div>
+            </div>
           </div>
         </form>
 
-        {/* Results Section */}
-        <div className="text-center min-h-[160px] flex flex-col items-center justify-center transition-all duration-500">
-          {isLoading && (
-            <div className="flex items-center space-x-2 text-neutral-500 font-medium tracking-wide">
-              <span className="inline-block w-2 h-2 rounded-full bg-black animate-ping" />
-              <span>Calculating probability...</span>
-            </div>
-          )}
-
-          {!isLoading && hasSearched && resultNumber !== null && (
-            <div className="animate-fade-in space-y-2">
-              <p className="text-lg md:text-xl font-medium text-neutral-800">
-                The chance is...
-              </p>
-              <div className="text-5xl md:text-7xl font-bold tracking-tight text-black font-mono">
-                1 in {displayNumber.toLocaleString()}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Results Display */}
+        {denominator && (
+          <div className="mt-10 space-y-2 animate-fade-in">
+            <p className="text-zinc-400 text-sm font-semibold">
+              Click result to toggle format
+            </p>
+            <button
+              onClick={() => setShowPercentage(!showPercentage)}
+              className="text-5xl md:text-7xl font-extrabold tracking-tight text-white hover:text-blue-400 transition-colors cursor-pointer select-none"
+            >
+              {showPercentage
+                ? getPercentageString(displayValue)
+                : `1 in ${displayValue.toLocaleString()}`}
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* Footer */}
-      <footer className="text-xs text-neutral-400 tracking-wider uppercase">
-        Statistical Probability Engine
-      </footer>
     </main>
   );
 }
