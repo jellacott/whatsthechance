@@ -8,48 +8,50 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.error('GEMINI_API_KEY is missing');
+      console.error('OPENROUTER_API_KEY is missing');
       return NextResponse.json({ error: 'API key is missing' }, { status: 500 });
     }
 
-    const systemInstruction = `You are a precise statistical probability estimation engine. Given a query starting with "What's the chance...", return a JSON object with a single field "denominator" representing "1 in N". Only return valid JSON like {"denominator": 1514123}. No markdown formatting, no explanations, no emojis.`;
-
     const userPrompt = `What's the chance ${prompt.trim()}`;
 
-    // Standard Gemini 2.5 Flash endpoint
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`,
-      {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: `${systemInstruction}\n\nQuery: ${userPrompt}` }],
-            },
-          ],
-        }),
-      }
-    );
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'openrouter/free',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a statistical probability engine. Estimate realistic odds for "1 in N" for the query given. Return ONLY a JSON object in this format: {"denominator": 1514123}. Do not include markdown code block formatting, explanations, or emojis.`
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        temperature: 0.2
+      }),
+    });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('Gemini API Error:', errText);
+      console.error('OpenRouter API Error:', errText);
       return NextResponse.json({ error: 'AI generation failed' }, { status: 500 });
     }
 
     const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const rawContent = data.choices?.[0]?.message?.content || '{}';
     
-    // Clean up any markdown code block backticks
-    const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Clean out backticks if returned
+    const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsedData = JSON.parse(cleanJson);
 
-    return NextResponse.json({ denominator: parsedData.denominator });
+    return NextResponse.json({ denominator: parsedData.denominator || 1000000 });
   } catch (err) {
     console.error('Server error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
