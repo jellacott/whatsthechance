@@ -10,40 +10,25 @@ export async function POST(request) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
+      console.error('API key missing');
       return NextResponse.json({ error: 'API key is missing' }, { status: 500 });
     }
 
-    const fullQuery = `What's the chance ${prompt.trim()}`;
+    const systemInstruction = `You are a precise statistical probability estimation engine. Given a query starting with "What's the chance...", return a JSON object with a single field "denominator" representing "1 in N". Only return valid JSON like {"denominator": 1514123}. No markdown formatting, no explanations, no emojis.`;
 
-    const systemPrompt = `
-      You are a precise statistical probability estimation engine for whatsthechance.com.
-      Given a user query starting with "What's the chance...", calculate or estimate realistic, scientifically grounded, or contextually logical odds for the event happening.
-      
-      Respond STRICTLY with a valid JSON object in this format:
-      {"denominator": 1514123}
-      
-      Rules:
-      - The denominator integer represents "1 in N".
-      - Return ONLY the JSON object. Do not include markdown code blocks (\`\`\`json), explanations, or emojis.
-      - If an event is standard or daily (e.g. raining in Seattle), denominator should be small (e.g. 2, 5, 10).
-      - If an event is extremely rare (e.g. hit by a meteorite), denominator should be large (e.g. 250000000).
-    `;
+    const userPrompt = `What's the chance ${prompt.trim()}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [
             {
-              parts: [{ text: `${systemPrompt}\n\nUser Query: ${fullQuery}` }],
+              parts: [{ text: `${systemInstruction}\n\nQuery: ${userPrompt}` }],
             },
           ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.2,
-          },
         }),
       }
     );
@@ -55,12 +40,15 @@ export async function POST(request) {
     }
 
     const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    const parsedData = JSON.parse(rawText);
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // Clean up any potential markdown formatting from AI output
+    const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(cleanJson);
 
     return NextResponse.json({ denominator: parsedData.denominator });
   } catch (err) {
-    console.error(err);
+    console.error('Server side error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
